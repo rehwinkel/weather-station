@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Weather Station</title>
+  </head>
+  <style>
+    body,
+    html {
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .title {
+      text-align: center;
+      font-size: 3rem;
+    }
+    .container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .chart {
+      background-color: #fff;
+      box-shadow: 0px 6px 12px rgba(0, 0, 0, 0.2);
+      padding: 2rem;
+      border-radius: 1rem;
+    }
+    .legendbox {
+      display: flex;
+      flex-direction: row;
+    }
+    .legendgrow {
+      flex-grow: 1;
+    }
+    .legendside {
+      display: flex;
+      flex-direction: column;
+      padding: 0.5rem;
+    }
+    .avgmediantext {
+      font-size: 1rem;
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      padding-top: 1rem;
+      gap: 1rem;
+    }
+    .charttitle {
+      font-size: 1.5rem;
+      text-align: center;
+      padding-bottom: 1rem;
+    }
+    #chart {
+      flex-grow: 1;
+    }
+  </style>
+  <script type="text/javascript">
+    function getTempY(margin, height, temp) {
+      const minTemp = 10;
+      const maxTemp = 40;
+      return (
+        height -
+        margin -
+        ((temp - minTemp) / (maxTemp - minTemp)) * (height - margin)
+      );
+    }
+    function getHumidityY(margin, height, hum) {
+      const minHumidity = 0;
+      const maxHumidity = 100;
+      return (
+        height -
+        margin -
+        ((hum - minHumidity) / (maxHumidity - minHumidity)) * (height - margin)
+      );
+    }
+
+    function drawTemperatureGraph(
+      data,
+      minTime,
+      maxTime,
+      margin,
+      width,
+      height,
+      ctx
+    ) {
+      ctx.strokeStyle = "rgb(255, 0, 0)";
+      ctx.beginPath();
+      ctx.moveTo(margin, getTempY(margin, height, data[0].temperature_celsius));
+      for (let i = 1; i < data.length; i++) {
+        const x =
+          ((data[i].time - minTime) / (maxTime - minTime)) * (width - margin) +
+          margin;
+        const y = getTempY(margin, height, data[i].temperature_celsius);
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.closePath();
+    }
+
+    function drawHumidityGraph(
+      data,
+      minTime,
+      maxTime,
+      margin,
+      width,
+      height,
+      ctx
+    ) {
+      ctx.strokeStyle = "rgb(0, 0, 255)";
+      ctx.beginPath();
+      ctx.moveTo(
+        margin,
+        getHumidityY(margin, height, data[0].humidity_percent)
+      );
+      for (let i = 1; i < data.length; i++) {
+        const x =
+          ((data[i].time - minTime) / (maxTime - minTime)) * (width - margin) +
+          margin;
+        const y = getHumidityY(margin, height, data[i].humidity_percent);
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.closePath();
+    }
+
+    function renderChart(data) {
+      const width = 800;
+      const height = 600;
+      const margin = 20;
+      const ctx = document.getElementById("canvas").getContext("2d");
+      ctx.clearRect(0, 0, width, height);
+      ctx.strokeStyle = "rgb(20, 20, 20)";
+      ctx.lineWidth = 2;
+
+      ctx.beginPath();
+      ctx.moveTo(margin, 0);
+      ctx.lineTo(margin, height);
+      ctx.stroke();
+      ctx.closePath();
+
+      ctx.beginPath();
+      ctx.moveTo(0, height - margin);
+      ctx.lineTo(width, height - margin);
+      ctx.stroke();
+      ctx.closePath();
+
+      ctx.strokeStyle = "rgb(220, 180, 180)";
+      for (let i = 3; i <= 8; i++) {
+        const y = getTempY(margin, height, i * 5);
+        ctx.beginPath();
+        ctx.moveTo(margin, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+        ctx.closePath();
+      }
+
+      ctx.strokeStyle = "rgb(180, 180, 220)";
+      for (let i = 1; i <= 10; i++) {
+        const y = getHumidityY(margin, height, i * 10);
+        ctx.beginPath();
+        ctx.moveTo(margin, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+        ctx.closePath();
+      }
+
+      if (data.length === 0) {
+        return;
+      }
+
+      const minTime = data[0].time;
+      const maxTime = data[data.length - 1].time;
+
+      drawTemperatureGraph(data, minTime, maxTime, margin, width, height, ctx);
+      drawHumidityGraph(data, minTime, maxTime, margin, width, height, ctx);
+    }
+
+    function updateAverageMedian(stat) {
+      document.getElementById("avg_hum").innerText =
+        stat.average_humidity_percent;
+      document.getElementById("med_hum").innerText =
+        stat.median_humidity_percent;
+      document.getElementById("avg_temp").innerText =
+        stat.average_temperature_celsius;
+      document.getElementById("med_temp").innerText =
+        stat.median_temperature_celsius;
+    }
+
+    window.onload = function () {
+      const updateCanvas = () => {
+        const data = fetch("/data")
+          .then((response) => response.json())
+          .then((data) => {
+            updateAverageMedian(data.stat);
+            const weatherData = data.data;
+            renderChart(weatherData);
+          });
+      };
+      setInterval(updateCanvas, 20 * 1000);
+      updateCanvas();
+    };
+  </script>
+  <body>
+    <h1 class="title">Weather Station</h1>
+    <div class="container">
+      <div class="chart">
+        <div class="charttitle">
+          <span>Temperature and Humidity over last Hour</span>
+        </div>
+        <div class="legendbox">
+          <div class="legendside">
+            <span> 40°C </span>
+            <div class="legendgrow"></div>
+            <span> 10°C </span>
+          </div>
+          <canvas id="canvas" width="800" height="600"></canvas>
+          <div class="legendside">
+            <span> 100% </span>
+            <div class="legendgrow"></div>
+            <span> 0% </span>
+          </div>
+        </div>
+        <div class="avgmediantext">
+          <div>Avg. Temperature <span id="avg_temp">X</span> °C</div>
+          <div>Med. Temperature <span id="med_temp">X</span> °C</div>
+          <div>Avg. Humidity <span id="avg_hum">X</span> %</div>
+          <div>Med. Humidity <span id="med_hum">X</span> %</div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
