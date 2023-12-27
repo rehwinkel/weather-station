@@ -1,0 +1,9 @@
+[Unit]
+Description=DHT22 Weather Readings
+
+[Service]
+ExecStart=/opt/weatherstation
+WorkingDirectory=/var/lib/weatherstation/data
+
+[Install]
+WantedBy=multi-user.target
