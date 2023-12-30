@@ -52,6 +52,28 @@
     #chart {
       flex-grow: 1;
     }
+    .timebuttons {
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      padding-top: 1rem;
+      gap: 1rem;
+    }
+    .timebuttons button {
+      border: none;
+      border-radius: 1rem;
+      padding: 0.75rem;
+      font-size: 1rem;
+    }
+    .selectedtime {
+      background-color: rgb(145, 198, 255);
+    }
+    .selectedtime:hover {
+      background-color: rgb(119, 185, 255);
+    }
+    .selectedtime:active {
+      background-color: rgb(79, 164, 255);
+    }
   </style>
   <script type="text/javascript">
     function getTempY(margin, height, temp) {
@@ -185,19 +207,53 @@
         stat.median_temperature_celsius;
     }
 
+    function updateCanvas() {
+      let data;
+      if (selectedTime === 1) {
+        data = fetch("/data");
+      } else if (selectedTime === 24) {
+        const unixTimeNow = new Date().getTime() / 1000;
+        const oneDayAgo = Math.floor(unixTimeNow - 24 * 60 * 60);
+        data = fetch(`/data?start=${oneDayAgo}`);
+      } else if (selectedTime === "all") {
+        data = fetch("/data?start=0");
+      }
+      data
+        .then((response) => response.json())
+        .then((data) => {
+          updateAverageMedian(data.stat);
+          const weatherData = data.data;
+          renderChart(weatherData);
+        });
+    }
+
     window.onload = function () {
-      const updateCanvas = () => {
-        const data = fetch("/data")
-          .then((response) => response.json())
-          .then((data) => {
-            updateAverageMedian(data.stat);
-            const weatherData = data.data;
-            renderChart(weatherData);
-          });
-      };
       setInterval(updateCanvas, 20 * 1000);
       updateCanvas();
     };
+
+    var selectedTime = 1;
+
+    function selectTime(time) {
+      const classListAll = document.getElementById("timeall").classList;
+      const classList24 = document.getElementById("time24").classList;
+      const classList1 = document.getElementById("time1").classList;
+      if (time === "all") {
+        classListAll.add("selectedtime");
+        classList24.remove("selectedtime");
+        classList1.remove("selectedtime");
+      } else if (time === 24) {
+        classList24.add("selectedtime");
+        classListAll.remove("selectedtime");
+        classList1.remove("selectedtime");
+      } else if (time === 1) {
+        classList1.add("selectedtime");
+        classList24.remove("selectedtime");
+        classListAll.remove("selectedtime");
+      }
+      selectedTime = time;
+      updateCanvas();
+    }
   </script>
   <body>
     <h1 class="title">Weather Station</h1>
@@ -224,6 +280,13 @@
           <div>Med. Temperature <span id="med_temp">X</span> °C</div>
           <div>Avg. Humidity <span id="avg_hum">X</span> %</div>
           <div>Med. Humidity <span id="med_hum">X</span> %</div>
+        </div>
+        <div class="timebuttons">
+          <button id="timeall" onclick="selectTime('all')">All Time</button>
+          <button id="time24" onclick="selectTime(24)">24 Hours</button>
+          <button id="time1" onclick="selectTime(1)" class="selectedtime">
+            1 Hour
+          </button>
         </div>
       </div>
     </div>
