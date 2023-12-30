@@ -2,7 +2,7 @@ use std::{
     path::Path,
     sync::Arc,
     thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use clap::Parser;
@@ -54,39 +54,48 @@ struct WeatherAveragesMedians {
     median_humidity_percent: f32,
 }
 
+fn median(data: &mut Vec<f32>) -> f32 {
+    if data.len() == 0 {
+        f32::NAN
+    } else if data.len() == 1 {
+        data[0]
+    } else {
+        let target_index = data.len() / 2;
+        let (_, element, _) =
+            data.select_nth_unstable_by(target_index, |a, b| a.partial_cmp(b).unwrap());
+        *element
+    }
+}
+
+fn average(data: &[f32]) -> f32 {
+    if data.len() > 0 {
+        data.iter().sum::<f32>() / data.len() as f32
+    } else {
+        f32::NAN
+    }
+}
+
 fn find_average_and_median(data: &[WeatherData]) -> WeatherAveragesMedians {
     let (mut sorted_temps, mut sorted_humidities): (Vec<f32>, Vec<f32>) = data
         .iter()
         .map(|d| (d.temperature_celsius, d.humidity_percent))
         .unzip();
-    sorted_temps.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    sorted_humidities.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    let median_temperature_celsius = if sorted_temps.len() > 0 {
-        sorted_temps[sorted_temps.len() / 2]
-    } else {
-        f32::NAN
-    };
-    let median_humidity_percent = if sorted_humidities.len() > 0 {
-        sorted_humidities[sorted_humidities.len() / 2]
-    } else {
-        f32::NAN
-    };
-    let average_temperature_celsius = if sorted_temps.len() > 0 {
-        sorted_temps.iter().sum::<f32>() / sorted_temps.len() as f32
-    } else {
-        f32::NAN
-    };
-    let average_humidity_percent = if sorted_humidities.len() > 0 {
-        sorted_humidities.iter().sum::<f32>() / sorted_humidities.len() as f32
-    } else {
-        f32::NAN
-    };
+    let average_temperature_celsius = average(&sorted_temps);
+    let average_humidity_percent = average(&sorted_humidities);
+    let median_temperature_celsius = median(&mut sorted_temps);
+    let median_humidity_percent = median(&mut sorted_humidities);
     WeatherAveragesMedians {
         average_temperature_celsius,
         average_humidity_percent,
         median_temperature_celsius,
         median_humidity_percent,
     }
+}
+
+const SECONDS_HOURS: i64 = 3600;
+
+fn time_to_unix(time: SystemTime) -> i64 {
+    time.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64
 }
 
 fn main() {
@@ -110,16 +119,18 @@ fn main() {
         move |request| match request.url().as_str() {
             "/" => Response::html(INDEX_HTML),
             "/data" => {
+                let end = request
+                    .get_param("end")
+                    .and_then(|end| end.parse().ok())
+                    .unwrap_or_else(|| time_to_unix(SystemTime::now()));
+                let start = request
+                    .get_param("start")
+                    .and_then(|end| end.parse().ok())
+                    .unwrap_or_else(|| end - SECONDS_HOURS);
+                info!("Requesting data from {} to {}", start, end);
                 let mut stmt = db.prepare("SELECT unix_time, temperature_celsius_q, humidity_percent_q FROM weather_readings WHERE unix_time BETWEEN ? AND ? ORDER BY unix_time;").unwrap();
-                let now = SystemTime::now();
-                let start = now - Duration::from_secs(3600);
-                stmt.bind((
-                    1,
-                    start.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64,
-                ))
-                .unwrap();
-                stmt.bind((2, now.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64))
-                    .unwrap();
+                stmt.bind((1, start)).unwrap();
+                stmt.bind((2, end)).unwrap();
                 let mut data = Vec::new();
                 while let Ok(State::Row) = stmt.next() {
                     let time = stmt.read::<i64, _>("unix_time").unwrap();
